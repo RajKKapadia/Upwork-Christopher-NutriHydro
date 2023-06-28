@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from flask import Blueprint, request
 
-from document_gpt.helper.conversation import create_conversation
+from document_gpt.helper.conversation import create_conversation, get_consent, get_email, get_mobile, get_name, get_general_response
 from document_gpt.helper.messenger_api import send_message
+from document_gpt.helper.database import get_user, create_user, update_messages, update_user
 from config import config
 
 facebook = Blueprint(
@@ -9,7 +12,8 @@ facebook = Blueprint(
     __name__
 )
 
-@facebook.route('/', methods=['GET'])
+
+@facebook.route('/facebook', methods=['GET'])
 def facebook_verify():
     args = request.args.to_dict()
     mode = args['hub.mode']
@@ -22,28 +26,185 @@ def facebook_verify():
         return 'BAD_REQUEST', 403
 
 
-@facebook.route('/', methods=['POST'])
+@facebook.route('/facebook', methods=['POST'])
 def facebook_messenger():
     try:
-        # TODO
-        # Get the sender id and query from the request
         body = request.get_json()
         sender_id = body['entry'][0]['messaging'][0]['sender']['id']
         query = body['entry'][0]['messaging'][0]['message']['text']
         print(sender_id, query)
-        # TODO
-        # get the user
-        # if not create
-        # create chat_history from the previous conversations
-        qa = create_conversation()
-        res = qa({
-            'context': '',
-            'query': query
-        })
-        print(res)
-        # TODO
-        # send message
-        send_message(sender_id, res['result'])
+
+        user = get_user(sender_id)
+
+        if user:
+            if user['status'] == 'active':
+                qa = create_conversation()
+                response = qa({
+                    'context': '',
+                    'query': query
+                })
+                update_messages(sender_id, query,
+                                response['result'], user['messageCount'])
+                send_message(sender_id, response['result'])
+            else:
+                properties = user['properties']
+                property = ''
+                for p in properties:
+                    if not p['isFilled']:
+                        property += p['name']
+                        break
+
+                if property == 'name':
+                    response = get_name(query)
+                    if response['status'] == -1:
+                        send_message(sender_id, config.ERROR_MESSAGE)
+                    elif response['status'] == 0:
+                        send_message(sender_id, response['output'])
+                    else:
+                        properties[0]['isFilled'] = True
+                        properties[0]['value'] = response['output']
+                        update_user(
+                            sender_id,
+                            {
+                                'userName': response['output'],
+                                'properties': properties
+                            }
+                        )
+                        response = get_general_response(
+                            'Politely ask just the mobile number of the user.')
+                        update_messages(sender_id, query,
+                                        response, user['messageCount'])
+                        send_message(
+                            sender_id,
+                            response)
+
+                elif property == 'mobile':
+                    response = get_mobile(query)
+                    print(response)
+                    if response['status'] == -1:
+                        send_message(sender_id, config.ERROR_MESSAGE)
+                    elif response['status'] == 0:
+                        send_message(sender_id, response['output'])
+                    else:
+                        properties[2]['isFilled'] = True
+                        properties[2]['value'] = response['output']
+                        update_user(
+                            sender_id,
+                            {
+                                'mobile': response['output'],
+                                'properties': properties
+                            }
+                        )
+                        response = get_general_response(
+                            'Politely ask just the eamil address of the user.')
+                        update_messages(sender_id, query,
+                                        response, user['messageCount'])
+                        send_message(
+                            sender_id,
+                            response)
+
+                elif property == 'email':
+                    response = get_email(query)
+                    if response['status'] == -1:
+                        send_message(sender_id, config.ERROR_MESSAGE)
+                    elif response['status'] == 0:
+                        send_message(sender_id, response['output'])
+                    else:
+                        properties[1]['isFilled'] = True
+                        properties[1]['value'] = response['output']
+                        update_user(
+                            sender_id,
+                            {
+                                'email': response['output'],
+                                'properties': properties
+                            }
+                        )
+                        update_messages(sender_id, query,
+                                        config.CONSENT_MESSAGE, user['messageCount'])
+                        send_message(
+                            sender_id,
+                            config.CONSENT_MESSAGE)
+
+                elif property == 'consent':
+                    response = get_consent(query)
+                    if response['status'] == -1:
+                        send_message(sender_id, config.ERROR_MESSAGE)
+                    elif response['status'] == 0:
+                        send_message(sender_id, response['output'])
+                    else:
+                        properties[3]['isFilled'] = True
+                        properties[3]['value'] = response['output']
+                        update_user(
+                            sender_id,
+                            {
+                                'consent': response['output'],
+                                'properties': properties
+                            }
+                        )
+                        send_message(
+                            sender_id, 'You are now ask any query regarding Nutri Hydro and its products.')
+
+                else:
+                    update_user(
+                        sender_id,
+                        {
+                            'status': 'active'
+                        }
+                    )
+                    qa = create_conversation()
+                    response = qa({
+                        'context': '',
+                        'query': query
+                    })
+                    update_messages(sender_id, query,
+                                    response['result'], user['messageCount'])
+                    send_message(sender_id, response['result'])
+
+        else:
+            response = get_general_response(
+                'Politely ask just the name of the user.')
+            message = {
+                'query': query,
+                'response': response,
+                'createdAt': datetime.now().strftime('%d/%m/%Y, %H:%M')
+            }
+            user = {
+                'userName': '',
+                'senderId': sender_id,
+                'messages': [message],
+                'messageCount': 1,
+                'mobile': '',
+                'email': '',
+                'consent': '',
+                'channel': 'Facebook',
+                'is_paid': False,
+                'created_at': datetime.now().strftime('%d/%m/%Y, %H:%M'),
+                'status': 'inactive',
+                'properties': [
+                    {
+                        'name': 'name',
+                        'isFilled': False,
+                        'value': ''
+                    },
+                    {
+                        'name': 'email',
+                        'isFilled': False,
+                        'value': ''
+                    },
+                    {
+                        'name': 'mobile',
+                        'isFilled': False,
+                        'value': ''
+                    },
+                    {
+                        'name': 'consent',
+                        'isFilled': False,
+                        'value': ''
+                    }
+                ]
+            }
+            create_user(user)
+            send_message(sender_id, response)
     except:
         pass
 

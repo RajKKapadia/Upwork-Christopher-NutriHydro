@@ -1,6 +1,6 @@
 import asyncio
 
-from document_gpt.helper.create_index import create_index
+from document_gpt.helper.index import create_index
 
 loop = asyncio.get_event_loop()
 
