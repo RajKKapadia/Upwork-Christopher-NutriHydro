@@ -5,6 +5,7 @@ from flask import Blueprint, request
 from document_gpt.helper.conversation import create_conversation, get_consent, get_email, get_mobile, get_name, get_general_response
 from document_gpt.helper.messenger_api import send_message
 from document_gpt.helper.database import get_user, create_user, update_messages, update_user
+from document_gpt.helper.utils import get_context_from_mongodb, create_airtable_user
 from config import config
 
 facebook = Blueprint(
@@ -32,15 +33,15 @@ def facebook_messenger():
         body = request.get_json()
         sender_id = body['entry'][0]['messaging'][0]['sender']['id']
         query = body['entry'][0]['messaging'][0]['message']['text']
-        print(sender_id, query)
 
         user = get_user(sender_id)
 
         if user:
             if user['status'] == 'active':
                 qa = create_conversation()
+                context = get_context_from_mongodb(user['messages'][-1:])
                 response = qa({
-                    'context': '',
+                    'context': context,
                     'query': query
                 })
                 update_messages(sender_id, query,
@@ -80,7 +81,6 @@ def facebook_messenger():
 
                 elif property == 'mobile':
                     response = get_mobile(query)
-                    print(response)
                     if response['status'] == -1:
                         send_message(sender_id, config.ERROR_MESSAGE)
                     elif response['status'] == 0:
@@ -151,9 +151,18 @@ def facebook_messenger():
                             'status': 'active'
                         }
                     )
+                    airtable_user = {
+                        'fb_id': str(sender_id),
+                        'name': properties[0]['value'],
+                        'email': properties[1]['value'],
+                        'mobile': properties[2]['value'],
+                        'consent': properties[3]['value']
+                    }
+                    create_airtable_user(airtable_user)
                     qa = create_conversation()
+                    context = get_context_from_mongodb(user['messages'][-1:])
                     response = qa({
-                        'context': '',
+                        'context': context,
                         'query': query
                     })
                     update_messages(sender_id, query,

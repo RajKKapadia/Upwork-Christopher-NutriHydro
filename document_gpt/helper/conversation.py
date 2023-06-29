@@ -2,11 +2,10 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.prompts import PromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
 
 from config import config
-
 
 def create_conversation() -> RetrievalQA:
     prompt_template = '''Followings are the conversation between AI and User.\
@@ -35,31 +34,26 @@ def create_conversation() -> RetrievalQA:
     )
     return qa
 
-
-chat = ChatOpenAI(temperature=0.0, openai_api_key=config.OPENAI_API_KEY)
-
-
-def get_mobile(query: str) -> str:
-    mobile_schema = ResponseSchema(
-        name='mobile',
-        description='Was a mobile number of the user. If not found, output -1.'
-    )
-    template = '''For the following text, extract the following information: \
-    mobile: Was a mobile number of the user. If not found, output -1. \
-    text: {text} \
-    {format_instructions}'''
-    response_schemas = [mobile_schema]
-    output_parser = StructuredOutputParser.from_response_schemas(
-        response_schemas)
+def get_mobile(query: str) -> dict:
+    response_schemas = [
+        ResponseSchema(name="mobile", description="it is a mobile number")
+    ]
+    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
     format_instructions = output_parser.get_format_instructions()
-    prompt = ChatPromptTemplate.from_template(template=template)
-    messages = prompt.format_messages(text=query,
-                                      format_instructions=format_instructions)
+    prompt = ChatPromptTemplate(
+        messages=[
+            HumanMessagePromptTemplate.from_template("try to extract a mobile number from the question, if not found output -1.\n{format_instructions}\n{question}")  
+        ],
+        input_variables=["question"],
+        partial_variables={"format_instructions": format_instructions}
+    )
     try:
-        response = chat(messages)
-        output = output_parser.parse(response.content)
+        chat = ChatOpenAI(temperature=0,openai_api_key=config.OPENAI_API_KEY)
+        _input = prompt.format_prompt(question=query)
+        output = chat(_input.to_messages())
+        output = output_parser.parse(output.content)
         if output['mobile'] == -1:
-            response = chat.predict('Politely ask just the mobile number of the user.')
+            response = chat.predict('Politely ask mobile number of the user.')
             return {
                 'status': 0,
                 'output': response
@@ -76,26 +70,25 @@ def get_mobile(query: str) -> str:
 
 
 def get_email(query: str) -> str:
-    email_schema = ResponseSchema(
-        name='email',
-        description='Was an email address fo the user. If not found, output -1.'
-    )
-    template = '''For the following text, extract the following information: \
-    email: Was an email address fo the user. If not found, output -1. \
-    text: {text} \
-    {format_instructions}'''
-    response_schemas = [email_schema]
-    output_parser = StructuredOutputParser.from_response_schemas(
-        response_schemas)
+    response_schemas = [
+        ResponseSchema(name="email", description="it is an email address of a user")
+    ]
+    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
     format_instructions = output_parser.get_format_instructions()
-    prompt = ChatPromptTemplate.from_template(template=template)
-    messages = prompt.format_messages(text=query,
-                                      format_instructions=format_instructions)
+    prompt = ChatPromptTemplate(
+        messages=[
+            HumanMessagePromptTemplate.from_template("try to extract an email address from the question, if not found output -1.\n{format_instructions}\n{question}")  
+        ],
+        input_variables=["question"],
+        partial_variables={"format_instructions": format_instructions}
+    )
     try:
-        response = chat(messages)
-        output = output_parser.parse(response.content)
+        chat = ChatOpenAI(temperature=0,openai_api_key=config.OPENAI_API_KEY)
+        _input = prompt.format_prompt(question=query)
+        output = chat(_input.to_messages())
+        output = output_parser.parse(output.content)
         if output['email'] == -1:
-            response = chat.predict('Politely ask just the email of the user.')
+            response = chat.predict('Politely ask email of a person.')
             return {
                 'status': 0,
                 'output': response
@@ -112,33 +105,31 @@ def get_email(query: str) -> str:
 
 
 def get_consent(query: str) -> str:
-    consent_schema = ResponseSchema(
-        name='consent',
-        description='Was a consent of a person, either Yes or No. If not found, output -1.'
-    )
-    template = '''For the following text, extract the following information: \
-    consent: Was a consent of a person, either Yes or No. If not found, output -1. \
-    text: {text} \
-    {format_instructions}'''
-    response_schemas = [consent_schema]
-    output_parser = StructuredOutputParser.from_response_schemas(
-        response_schemas)
+    response_schemas = [
+        ResponseSchema(name="consent", description="it is a consent of a user")
+    ]
+    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
     format_instructions = output_parser.get_format_instructions()
-    prompt = ChatPromptTemplate.from_template(template=template)
-    messages = prompt.format_messages(text=query,
-                                      format_instructions=format_instructions)
+    prompt = ChatPromptTemplate(
+        messages=[
+            HumanMessagePromptTemplate.from_template("try to extract a consent of user from the question, if found then return either Yes or No, if not found output -1.\n{format_instructions}\n{question}")  
+        ],
+        input_variables=["question"],
+        partial_variables={"format_instructions": format_instructions}
+    )
     try:
-        response = chat(messages)
-        output = output_parser.parse(response.content)
+        chat = ChatOpenAI(temperature=0,openai_api_key=config.OPENAI_API_KEY)
+        _input = prompt.format_prompt(question=query)
+        output = chat(_input.to_messages())
+        output = output_parser.parse(output.content)
         if output['consent'] == -1:
-            response = config.CONSENT_MESSAGE
             return {
                 'status': 0,
-                'output': response
+                'output': config.CONSENT_MESSAGE
             }
         return {
             'status': 1,
-            'output': output
+            'output': output['consent']
         }
     except:
         return {
@@ -146,27 +137,26 @@ def get_consent(query: str) -> str:
             'output': -1
         }
 
-def get_name(query: str) -> str:
-    name_schema = ResponseSchema(
-        name='name',
-        description='Was a name of the person. If not found, output -1.'
-    )
-    template = '''For the following text, extract the following information: \
-    name: Was a name of the person. If found then capitalize the name and if not found, output -1. \
-    text: {text} \
-    {format_instructions}'''
-    response_schemas = [name_schema]
-    output_parser = StructuredOutputParser.from_response_schemas(
-        response_schemas)
+def get_name(query: str) -> dict:
+    response_schemas = [
+        ResponseSchema(name="name", description="it is a name of a person")
+    ]
+    output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
     format_instructions = output_parser.get_format_instructions()
-    prompt = ChatPromptTemplate.from_template(template=template)
-    messages = prompt.format_messages(text=query,
-                                      format_instructions=format_instructions)
+    prompt = ChatPromptTemplate(
+        messages=[
+            HumanMessagePromptTemplate.from_template("try to extract name of a person from the question, if found then capitalize the name, if not found output -1.\n{format_instructions}\n{question}")  
+        ],
+        input_variables=["question"],
+        partial_variables={"format_instructions": format_instructions}
+    )
     try:
-        response = chat(messages)
-        output = output_parser.parse(response.content)
+        chat = ChatOpenAI(temperature=0,openai_api_key=config.OPENAI_API_KEY)
+        _input = prompt.format_prompt(question=query)
+        output = chat(_input.to_messages())
+        output = output_parser.parse(output.content)
         if output['name'] == -1:
-            response = chat.predict('Politely ask just the name of the user.')
+            response = chat.predict('Politely ask name of a person.')
             return {
                 'status': 0,
                 'output': response
@@ -183,6 +173,7 @@ def get_name(query: str) -> str:
 
 def get_general_response(query: str) -> str:
     try:
+        chat = ChatOpenAI(temperature=0,openai_api_key=config.OPENAI_API_KEY)
         response = chat.predict(query)
         return response
     except:

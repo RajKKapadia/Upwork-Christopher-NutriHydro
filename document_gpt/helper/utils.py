@@ -1,3 +1,7 @@
+from pyairtable import Table
+
+from config import config
+
 def get_context(data: list) -> str:
     context = ''
     for i in range(0, len(data), 2):
@@ -10,7 +14,12 @@ def get_context(data: list) -> str:
 
 def get_context_from_mongodb(data: list) -> str:
     context = ''
-    for i in range(len(data)):
-        context += f'User: {data[i]["query"]}\n'
-        context += f'System: {data[i]["response"]}\n'
+    for d in data:
+        context += f'User: {d["query"]}\n'
+        context += f'AI: {d["response"]}\n'
     return context
+
+table = Table(config.AIRTABLE_API_KEY, config.AIRTABLE_APP_ID, 'users')
+
+def create_airtable_user(user: dict) -> None:
+    table.create(user)
