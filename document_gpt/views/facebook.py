@@ -5,7 +5,7 @@ from flask import Blueprint, request
 from document_gpt.helper.conversation import create_conversation, get_consent, get_email, get_mobile, get_name, get_general_response
 from document_gpt.helper.messenger_api import send_message
 from document_gpt.helper.database import get_user, create_user, update_messages, update_user
-from document_gpt.helper.utils import get_context_from_mongodb, create_airtable_user
+from document_gpt.helper.utils import get_chat_history_from_mongodb, create_airtable_user
 from config import config
 
 facebook = Blueprint(
@@ -33,20 +33,14 @@ def facebook_messenger():
         body = request.get_json()
         sender_id = body['entry'][0]['messaging'][0]['sender']['id']
         query = body['entry'][0]['messaging'][0]['message']['text']
-
         user = get_user(sender_id)
-
         if user:
             if user['status'] == 'active':
-                qa = create_conversation()
-                context = get_context_from_mongodb(user['messages'][-1:])
-                response = qa({
-                    'context': context,
-                    'query': query
-                })
+                chat_history = get_chat_history_from_mongodb(user['messages'][-2:])
+                response = create_conversation(query, chat_history)
                 update_messages(sender_id, query,
-                                response['result'], user['messageCount'])
-                send_message(sender_id, response['result'])
+                                response, user['messageCount'])
+                send_message(sender_id, response)
             else:
                 properties = user['properties']
                 property = ''
@@ -159,15 +153,11 @@ def facebook_messenger():
                         'consent': properties[3]['value']
                     }
                     create_airtable_user(airtable_user)
-                    qa = create_conversation()
-                    context = get_context_from_mongodb(user['messages'][-1:])
-                    response = qa({
-                        'context': context,
-                        'query': query
-                    })
+                    chat_history = get_chat_history_from_mongodb(user['messages'][-2:])
+                    response = create_conversation(query, chat_history)
                     update_messages(sender_id, query,
-                                    response['result'], user['messageCount'])
-                    send_message(sender_id, response['result'])
+                                    response, user['messageCount'])
+                    send_message(sender_id, response)
 
         else:
             response = get_general_response(
