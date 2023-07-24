@@ -79,6 +79,9 @@ def create_conversation_gradio(query: str, chat_history: list) -> tuple:
 
 
 def get_mobile(query: str) -> dict:
+    # A sanity check for the mobile
+    if len(query.split()) < 2:
+        query = f'My mobile number is {query}' 
     response_schemas = [
         ResponseSchema(name="mobile", description="it is a mobile number")
     ]
@@ -116,6 +119,9 @@ def get_mobile(query: str) -> dict:
 
 
 def get_email(query: str) -> str:
+    # A sanity check for the email
+    if len(query.split()) < 2:
+        query = f'My email address {query}' 
     response_schemas = [
         ResponseSchema(
             name="email", description="it is an email address of a user")
@@ -190,6 +196,9 @@ def get_consent(query: str) -> str:
 
 
 def get_name(query: str) -> dict:
+    # A sanity check for the name
+    if len(query.split()) < 3:
+        query = f'My name is {query}' 
     response_schemas = [
         ResponseSchema(name="name", description="it is a name of a person")
     ]
